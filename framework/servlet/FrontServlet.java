@@ -16,5 +16,6 @@ public class FrontServlet extends HttpServlet {
     
         resp.setContentType("text/html");
         resp.getWriter().write("<h1>Vous essayez d'acceder a : " + urlPath + "</h1>");
+    //uhhh
     }
 }
