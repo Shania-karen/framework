@@ -30,15 +30,15 @@ cd /d "%BUILD_DIR%"
 if exist "framework.jar" del "framework.jar"
 jar cvf "framework.jar" -C "classes" .
 
-REM Copie du JAR dans le projet Test (WEB-INF/lib)
+REM 
 echo Copie du framework.jar dans le projet Test...
 if not exist "%TEST_DIR%\WEB-INF\lib" mkdir "%TEST_DIR%\WEB-INF\lib"
 xcopy "%BUILD_DIR%\framework.jar" "%TEST_DIR%\WEB-INF\lib\" /Y >nul
 
-REM Ne PAS copier les classes compilées du framework dans WEB-INF/classes
+REM 
 
 
-REM Démarrage optionnel de Tomcat si un chemin est fourni en paramètre
+REM 
 if not "%~1"=="" (
     echo Demarrage de Tomcat...
     call "%~1\bin\startup.bat"
