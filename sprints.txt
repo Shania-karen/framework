@@ -1,0 +1,14 @@
+sprint2-bis
+
+retourne la liste des class qui a les annotations par rapport aux controllers . 
+exemple 
+
+com.package.controller
+@Controller
+Test1.Java
+
+com.package.controller
+Test2.java
+
+La fonction va retourner Test1.java , pcq y a que Test1 qui a l'annotation 
+@controller dans le package controller
