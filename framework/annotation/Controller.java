@@ -9,4 +9,6 @@ import java.lang.annotation.ElementType;
 @Target(ElementType.TYPE)
 
 public @interface Controller {
+
+    String value();
 }
