@@ -3,7 +3,7 @@ package test.controllers;
 import framework.annotation.Controller;
 import framework.annotation.Get;
 
-@Controller
+@Controller("/login")
 public class LoginController {
     
     @Get("/login")
