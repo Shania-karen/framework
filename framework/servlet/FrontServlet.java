@@ -11,7 +11,6 @@ import java.util.Map;
 import java.io.*;
 
 
-
 public class FrontServlet extends HttpServlet {
 
     private Map<String, Mapping> urlMappings = new HashMap<>();
