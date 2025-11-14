@@ -5,9 +5,6 @@ import jakarta.servlet.http.*;
 import framework.helpers.ComponentScan;
 import framework.helpers.Mapping;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,8 +42,15 @@ public class FrontServlet extends HttpServlet {
     }
 
     private void processRequest(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        String path = req.getServletPath();
         PrintWriter out = resp.getWriter();
+        out.println("URI = " + req.getRequestURI());
+        out.println("ServletPath = " + req.getServletPath());
+        out.println("PathInfo = " + req.getPathInfo());
+        String path = req.getPathInfo();
+        if (path == null || path.isEmpty()) {
+            path = req.getServletPath();
+            out.println("pathhhhh" + path);
+        }
 
         Mapping mapping = urlMappings.get(path);
 
@@ -60,13 +64,11 @@ public class FrontServlet extends HttpServlet {
             Object controllerInstance = clazz.getConstructor().newInstance();
             Method method = clazz.getMethod(mapping.getMethodName());
 
-            // on asumera pour l'instant que les méthodes retournent des String
             Object result = method.invoke(controllerInstance);
 
-            out.println("Mapped method found for url: "+path);
-
+            out.println("Mapped method found for url: " + path);
             if (result instanceof String) {
-                out.println("Method value: ");
+                out.println("Method value:");
                 out.println(result);
             }
 
@@ -75,4 +77,5 @@ public class FrontServlet extends HttpServlet {
             e.printStackTrace(out);
         }
     }
+
 }
