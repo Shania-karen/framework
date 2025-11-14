@@ -5,9 +5,9 @@ import framework.annotation.Get;
 import framework.annotation.Post;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URL;
+import java.net.JarURLConnection;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,78 +18,82 @@ public class ComponentScan {
 
     public static Map<String, Mapping> scanControllers(String packageName) throws Exception {
         Map<String, Mapping> mappings = new HashMap<>();
-        
         String packagePath = packageName.replace('.', '/');
+
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        
         Enumeration<URL> resources = classLoader.getResources(packagePath);
-        
+
         while (resources.hasMoreElements()) {
             URL resource = resources.nextElement();
-            
-            if (resource.getProtocol().equals("file")) {
-                File directory = new File(resource.getFile());
-                scanDirectory(directory, packageName, mappings);
-            } else if (resource.getProtocol().equals("jar")) {
-                scanJar(resource, packagePath, mappings);
+            System.out.println("Found resource: " + resource);
+
+            String protocol = resource.getProtocol();
+
+            if ("file".equals(protocol)) {
+                // Scanne les classes dans WEB-INF/classes
+                File directory = new File(resource.toURI());
+                if (directory.exists()) {
+                    scanDirectory(directory, packageName, mappings, classLoader);
+                }
+            } else if ("jar".equals(protocol)) {
+                // Scanne les classes du JAR, mais **ignore les controllers** du projet
+                if (!packageName.startsWith("framework.controller")) {
+                    scanJar(resource, packageName, mappings, classLoader);
+                } else {
+                    System.out.println("Skipping scanning controllers from JAR");
+                }
+            } else {
+                System.out.println("Skipping resource with protocol: " + protocol);
             }
         }
-        
+
         return mappings;
     }
 
-    private static void scanDirectory(File directory, String packageName, Map<String, Mapping> mappings) throws Exception {
-        if (!directory.exists()) {
-            return;
-        }
-
+    private static void scanDirectory(File directory, String packageName, Map<String, Mapping> mappings, ClassLoader cl) throws Exception {
         File[] files = directory.listFiles();
-        if (files == null) {
-            return;
-        }
+        if (files == null) return;
 
         for (File file : files) {
             if (file.isDirectory()) {
-                scanDirectory(file, packageName + "." + file.getName(), mappings);
+                scanDirectory(file, packageName + "." + file.getName(), mappings, cl);
             } else if (file.getName().endsWith(".class")) {
-                String className = packageName + "." + file.getName().substring(0, file.getName().length() - 6);
-                processClass(className, mappings);
+                String className = packageName + "." + file.getName().replaceAll("\\.class$", "");
+                processClass(className, mappings, cl);
             }
         }
     }
 
-    private static void scanJar(URL resource, String packagePath, Map<String, Mapping> mappings) throws Exception {
-        String jarPath = resource.getPath().substring(5, resource.getPath().indexOf("!"));
-        
-        try (JarFile jar = new JarFile(jarPath)) {
+    private static void scanJar(URL resource, String packageName, Map<String, Mapping> mappings, ClassLoader cl) throws Exception {
+        JarURLConnection jarConn = (JarURLConnection) resource.openConnection();
+        try (JarFile jar = jarConn.getJarFile()) {
             Enumeration<JarEntry> entries = jar.entries();
-            
+            String packagePath = packageName.replace('.', '/');
+
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
                 String entryName = entry.getName();
-                
-                if (entryName.startsWith(packagePath) && entryName.endsWith(".class")) {
-                    String className = entryName
-                        .substring(0, entryName.length() - 6)
-                        .replace('/', '.');
-                    
-                    processClass(className, mappings);
+
+                if (entryName.endsWith(".class") && entryName.startsWith(packagePath)) {
+                    String className = entryName.replace('/', '.').replaceAll("\\.class$", "");
+                    processClass(className, mappings, cl);
                 }
             }
         }
     }
 
-    private static void processClass(String className, Map<String, Mapping> mappings) {
+    private static void processClass(String className, Map<String, Mapping> mappings, ClassLoader cl) {
         try {
-            Class<?> clazz = Class.forName(className);
-            
+            Class<?> clazz = cl.loadClass(className);
+
             if (clazz.isAnnotationPresent(Controller.class)) {
+                System.out.println("Found controller class: " + className);
                 Controller controllerAnnotation = clazz.getAnnotation(Controller.class);
                 String controllerPath = controllerAnnotation.value();
-                
+
                 for (Method method : clazz.getDeclaredMethods()) {
                     String fullPath = null;
-                    
+
                     if (method.isAnnotationPresent(Get.class)) {
                         Get getAnnotation = method.getAnnotation(Get.class);
                         fullPath = controllerPath + getAnnotation.value();
@@ -97,7 +101,7 @@ public class ComponentScan {
                         Post postAnnotation = method.getAnnotation(Post.class);
                         fullPath = controllerPath + postAnnotation.value();
                     }
-                    
+
                     if (fullPath != null) {
                         Mapping mapping = new Mapping(className, method.getName());
                         mappings.put(fullPath, mapping);
@@ -108,7 +112,7 @@ public class ComponentScan {
         } catch (ClassNotFoundException e) {
             System.err.println("Could not load class: " + className);
         } catch (NoClassDefFoundError e) {
-       
+            System.err.println("Cannot load class (dependency missing?): " + className);
         }
     }
 }
