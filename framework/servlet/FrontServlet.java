@@ -1,61 +1,111 @@
 package framework.servlet;
 
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
+import framework.helpers.ComponentScan;
+import framework.helpers.Mapping;
 
-import java.io.File;
-import java.io.FileInputStream;
+import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.io.*;
+import java.lang.reflect.Method;
+import java.util.Map;
 
 public class FrontServlet extends HttpServlet {
 
-    @Override
-    protected void service(HttpServletRequest req, HttpServletResponse resp) 
-            throws ServletException, IOException {
-       
-        String context = req.getContextPath();        
-        String urlPath = req.getRequestURI();
-        String path=urlPath.substring(context.length());
+    private Map<String, Mapping> urlMappings;
+    private String controllerPackage;
 
-        if(getRessource(path,req,resp)){
-            return ;
-        }        
-        else{
-            System.out.println(" a : " + urlPath);
+    @Override
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+        controllerPackage = config.getInitParameter("controller-package");
+        System.out.println("FrontServlet initializeeeeed!");
+        System.out.println("Scanning package: " + controllerPackage);  
         
-            resp.setContentType("text/html");
-            resp.getWriter().write("<h1> " + urlPath + "</h1>");
-      
+        if (controllerPackage == null || controllerPackage.isEmpty()) {
+            System.err.println("ERROR: controller-package parameter is null or empty!");
+            return;
+        }
+        
+        try {
+            urlMappings = ComponentScan.scanControllers(controllerPackage);
+            System.out.println("Mappings loaded: " + urlMappings.keySet());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
-    private boolean getRessource( String path,HttpServletRequest req , HttpServletResponse resp) throws ServletException , IOException{
-        String realPath=getServletContext().getRealPath(path);
-        if(realPath !=null){
-            File file= new File(realPath);
-            if(file.exists() && file.isFile()){
-                RequestDispatcher dispatcher=req.getRequestDispatcher(path);
-                String mimeType=getServletContext().getMimeType(realPath);
-                if(mimeType ==null){
-                    mimeType="application/octet-stream";
-                }
-                resp.setContentType(mimeType);
-                try {
-                   FileInputStream in= new FileInputStream(file);
-                   OutputStream out= resp.getOutputStream();
-                   byte [] buffer=new byte[4096];
-                   int read;
-                   while((read=in.read(buffer))!=-1){
-                    out.write(buffer , 0,read);
-                   }
-                } catch (Exception e) {
-                 
-                }
-                return true;
 
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        processRequest(req, resp);
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        processRequest(req, resp);
+    }
+
+    private void processRequest(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String path = req.getRequestURI().substring(req.getContextPath().length());
+        System.out.println("Computed path = " + path);
+        
+        Mapping mapping = urlMappings.get(path);
+        
+        if (mapping != null) {
+            try {
+                // Charger la classe du contrôleur
+                Class<?> controllerClass = Class.forName(mapping.getClassName());
+                
+                // Créer une instance du contrôleur
+                Object controllerInstance = controllerClass.getDeclaredConstructor().newInstance();
+                
+                // Récupérer la méthode avec ses paramètres
+                Method method = null;
+                for (Method m : controllerClass.getDeclaredMethods()) {
+                    if (m.getName().equals(mapping.getMethodName())) {
+                        method = m;
+                        break;
+                    }
+                }
+                
+                if (method == null) {
+                    resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Method not found");
+                    return;
+                }
+                
+                // Invoquer selon le nombre de paramètres
+                Object result;
+                if (method.getParameterCount() == 0) {
+                    result = method.invoke(controllerInstance);
+                } else if (method.getParameterCount() == 2) {
+                    result = method.invoke(controllerInstance, req, resp);
+                } else {
+                    resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
+                        "Unsupported method signature");
+                    return;
+                }
+                
+                // Afficher le résultat
+                resp.setContentType("text/html");
+                resp.setCharacterEncoding("UTF-8");
+                
+                if (result != null) {
+                    resp.getWriter().write(result.toString());
+                } else {
+                    resp.getWriter().write("Method executed successfully (no return value)");
+                }
+                
+                System.out.println("Method executed: " + mapping.getClassName() + "." + mapping.getMethodName());
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
+                    "Error executing method: " + e.getMessage());
             }
+        } else {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "URL not found: " + path);
         }
-
-        return false;
     }
 }

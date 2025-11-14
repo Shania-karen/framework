@@ -15,14 +15,12 @@ if not exist "%BUILD_DIR%\classes" mkdir "%BUILD_DIR%\classes"
 
 REM Compilation récursive des sources Java du framework
 echo Compilation du framework...
-for /R "%FRAMEWORK_DIR%" %%f in (*.java) do (
-    echo   Compilation de %%~nxf
-    javac -classpath "%SERVLET_JAR%" -d "%BUILD_DIR%\classes" "%%f"
-    if errorlevel 1 (
-        echo Erreur de compilation du fichier %%~nxf
-        exit /b 1
-    )
-)
+
+javac -classpath "%SERVLET_JAR%" -d "%BUILD_DIR%\classes" ^
+    %FRAMEWORK_DIR%\framework\annotation\*.java ^
+    %FRAMEWORK_DIR%\framework\helpers\*.java ^
+    %FRAMEWORK_DIR%\framework\servlet\*.java
+
 
 REM Création du JAR du framework
 echo Creation du JAR du framework...
