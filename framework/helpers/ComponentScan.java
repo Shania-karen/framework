@@ -92,6 +92,10 @@ public class ComponentScan {
                 String controllerPath = controllerAnnotation.value();
 
                 for (Method method : clazz.getDeclaredMethods()) {
+                        System.out.println("  Checkinnnng method: " + method.getName());
+                        System.out.println("    Has @Get? " + method.isAnnotationPresent(Get.class));
+                        System.out.println("    Has @Post? " + method.isAnnotationPresent(Post.class));
+    
                     String fullPath = null;
 
                     if (method.isAnnotationPresent(Get.class)) {

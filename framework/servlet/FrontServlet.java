@@ -2,7 +2,9 @@ package framework.servlet;
 
 import framework.helpers.ComponentScan;
 import framework.helpers.Mapping;
+import framework.helpers.ModelAndView;
 
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
@@ -86,15 +88,16 @@ public class FrontServlet extends HttpServlet {
                         "Unsupported method signature");
                     return;
                 }
-                
-                // Afficher le résultat
-                resp.setContentType("text/html");
-                resp.setCharacterEncoding("UTF-8");
-                
-                if (result != null) {
-                    resp.getWriter().write(result.toString());
+                System.out.println("Method invoked, result: " + result);
+                // Gérer le résultat selon son type
+                if (result instanceof ModelAndView) {
+                    handleModelAndView((ModelAndView) result, req, resp);
+                } else if (result instanceof String) {
+                    handleStringResponse((String) result, resp);
+                } else if (result != null) {
+                    handleStringResponse(result.toString(), resp);
                 } else {
-                    resp.getWriter().write("Method executed successfully (no return value)");
+                    handleStringResponse("Method executed successfully (no return value)", resp);
                 }
                 
                 System.out.println("Method executed: " + mapping.getClassName() + "." + mapping.getMethodName());
@@ -107,5 +110,27 @@ public class FrontServlet extends HttpServlet {
         } else {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND, "URL not found: " + path);
         }
+    }
+
+    private void handleModelAndView(ModelAndView mav, HttpServletRequest req, HttpServletResponse resp) 
+            throws ServletException, IOException {
+        
+        System.out.println("=== Handling ModelAndView ===");
+        System.out.println("View name: " + mav.getViewName());
+        for (Map.Entry<String, Object> entry : mav.getModel().entrySet()) {
+            req.setAttribute(entry.getKey(), entry.getValue());
+        }
+        
+        // Forward vers la vue JSP
+        String viewPath = "/WEB-INF/views/" + mav.getViewName() + ".jsp";
+        System.out.println("Forwarding to: " + viewPath);
+        RequestDispatcher dispatcher = req.getRequestDispatcher(viewPath);
+        dispatcher.forward(req, resp);
+    }
+
+    private void handleStringResponse(String content, HttpServletResponse resp) throws IOException {
+        resp.setContentType("text/html");
+        resp.setCharacterEncoding("UTF-8");
+        resp.getWriter().write(content);
     }
 }
