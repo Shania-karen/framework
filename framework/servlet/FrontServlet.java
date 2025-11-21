@@ -175,9 +175,43 @@ public class FrontServlet extends HttpServlet {
 
 
     @Override
+    
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        processRequest(req, resp);
+
+        String requestPath = req.getServletPath();
+        System.out.println("\n=== POST REÇU ===");
+        System.out.println("URL demandée : " + requestPath);
+
+        Mapping mapping = null;
+        Map<String, String> pathParams = new HashMap<>();
+
+        System.out.println("\n=== RECHERCHE DU MAPPING (POST) ===");
+        for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
+            String pattern = entry.getKey();
+            System.out.println("Test du pattern : " + pattern);
+
+            if (UrlMatcher.matches(pattern, requestPath)) {
+                System.out.println("✓ MATCH TROUVÉ !");
+                mapping = entry.getValue();
+                pathParams = UrlMatcher.extractParams(pattern, requestPath);
+                break;
+            }
+        }
+
+        if (mapping == null) {
+            System.out.println("✗ AUCUN MAPPING TROUVÉ - 404");
+            resp.sendError(404, "Route not found (POST)");
+            return;
+        }
+
+        try {
+            invokeMethod(mapping, req, resp, pathParams);
+        } catch (Exception e) {
+            e.printStackTrace();
+            resp.sendError(500, "Server error: " + e.getMessage());
+        }
     }
+
 
     private void processRequest(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String path = req.getRequestURI().substring(req.getContextPath().length());
