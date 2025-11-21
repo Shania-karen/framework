@@ -10,11 +10,11 @@ import java.util.regex.Pattern;
 public class UrlMatcher {
 
     public static boolean matches(String pattern, String url) {
-        // Convertir le pattern en regex
-        // "/users/{id}" devient "/users/([^/]+)"
-        String regex = patternToRegex(pattern);
-        
-        return url.matches(regex);
+        pattern = pattern.replace("/", "\\/");
+        // Transformer {id} en groupe numérique
+        pattern = pattern.replaceAll("\\{[^/]+}", "([0-9]+)");
+
+        return url.matches(pattern);
     }
     
     /**
@@ -27,7 +27,7 @@ public class UrlMatcher {
     public static Map<String, String> extractParams(String pattern, String url) {
         Map<String, String> params = new HashMap<>();
         
-        // 1. Extraire les NOMS des paramètres du pattern
+
         List<String> paramNames = extractParamNames(pattern);
         
         // 2. Convertir le pattern en regex pour capturer les VALEURS

@@ -50,8 +50,8 @@ public class FrontServlet extends HttpServlet {
     throws ServletException, IOException {
     
         String requestPath = request.getServletPath();
-        System.out.println("\n=== REQUÊTE REÇUE ===");
-        System.out.println("URL demandée : " + requestPath);
+        System.out.println("\n=== REQUETE REÇUE ===");
+        System.out.println("URL demandee : " + requestPath);
         
         // CHERCHER UN MAPPING CORRESPONDANT
         Mapping mapping = null;
@@ -92,35 +92,87 @@ public class FrontServlet extends HttpServlet {
     }
 
     private void invokeMethod(Mapping mapping, 
-                            HttpServletRequest req, 
-                            HttpServletResponse resp,
-                            Map<String, String> pathParams) throws Exception {
-        
-        System.out.println("\n=== INVOCATION DE LA MÉTHODE ===");
-        System.out.println("Classe : " + mapping.getClassName());
-        System.out.println("Méthode : " + mapping.getMethodName());
-        
-        // Charger la classe
-        Class<?> clazz = Class.forName(mapping.getClassName());
-        System.out.println("✓ Classe chargée");
-        
-        // Créer une instance du controller
-        Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
-        System.out.println("✓ Instance créée : " + controllerInstance);
-        
-        // Récupérer la méthode
-        Method method = clazz.getMethod(
-            mapping.getMethodName(),
-            HttpServletRequest.class,
-            HttpServletResponse.class,
-            Map.class
-        );
-        System.out.println("✓ Méthode trouvée : " + method.getName());
-        
-        // INVOQUER LA MÉTHODE
-        System.out.println("✓ Invocation de la méthode...\n");
-        method.invoke(controllerInstance, req, resp, pathParams);
+                          HttpServletRequest req, 
+                          HttpServletResponse resp,
+                          Map<String, String> pathParams) throws Exception {
+
+    System.out.println("\n=== INVOCATION DE LA MÉTHODE ===");
+
+    Class<?> clazz = Class.forName(mapping.getClassName());
+    Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+
+    Method targetMethod = null;
+
+    // 1) Chercher une méthode compatible automatiquement
+    for (Method m : clazz.getDeclaredMethods()) {
+        if (!m.getName().equals(mapping.getMethodName())) continue;
+
+        int params = m.getParameterCount();
+
+        if (params == 0) { // hello()
+            targetMethod = m;
+            break;
+        }
+
+        if (params == 1 &&
+            m.getParameterTypes()[0] == HttpServletRequest.class) {
+            targetMethod = m;
+            break;
+        }
+
+        if (params == 2 &&
+            m.getParameterTypes()[0] == HttpServletRequest.class &&
+            m.getParameterTypes()[1] == HttpServletResponse.class) {
+            targetMethod = m;
+            break;
+        }
+
+        if (params == 3 &&
+            m.getParameterTypes()[0] == HttpServletRequest.class &&
+            m.getParameterTypes()[1] == HttpServletResponse.class &&
+            m.getParameterTypes()[2] == Map.class) {
+            targetMethod = m;
+            break;
+        }
     }
+
+    if (targetMethod == null) {
+        throw new RuntimeException("No compatible method found for: " + mapping.getMethodName());
+    }
+
+    Object result;
+
+    // 2) Invocation selon le nombre de paramètres
+    switch (targetMethod.getParameterCount()) {
+        case 0:
+            result = targetMethod.invoke(controllerInstance);
+            break;
+
+        case 1:
+            result = targetMethod.invoke(controllerInstance, req);
+            break;
+
+        case 2:
+            result = targetMethod.invoke(controllerInstance, req, resp);
+            break;
+
+        case 3:
+            result = targetMethod.invoke(controllerInstance, req, resp, pathParams);
+            break;
+
+        default:
+            throw new RuntimeException("Unsupported method signature");
+    }
+
+    // 3) Gestion du retour
+    if (result instanceof String) {
+        resp.getWriter().write((String) result);
+    } 
+    else if (result instanceof ModelAndView) {
+        handleModelAndView((ModelAndView) result, req, resp);
+    }
+}
+
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
