@@ -63,18 +63,18 @@ public class FrontServlet extends HttpServlet {
             System.out.println("Test du pattern : " + pattern);
             
             if (UrlMatcher.matches(pattern, requestPath)) {
-                System.out.println("✓ MATCH TROUVÉ !");
+                System.out.println(" MATCH TROUVE !");
                 mapping = entry.getValue();
                 pathParams = UrlMatcher.extractParams(pattern, requestPath);
                 break;
             } else {
-                System.out.println("✗ Pas de match");
+                System.out.println(" Pas de match");
             }
         }
         try {
             
             if (mapping != null) {
-                System.out.println("\n=== PARAMÈTRES EXTRAITS ===");
+                System.out.println("\n=== PARAMETRES EXTRAITS ===");
                 for (Map.Entry<String, String> param : pathParams.entrySet()) {
                     System.out.println(param.getKey() + " = " + param.getValue());
                 }
@@ -82,7 +82,7 @@ public class FrontServlet extends HttpServlet {
                 // INVOQUER LA MÉTHODE
                 invokeMethod(mapping, request, response, pathParams);
             } else {
-                System.out.println("✗ AUCUN MAPPING TROUVÉ - 404");
+                System.out.println("✗ AUCUN MAPPING TROUVE - 404");
                 response.sendError(404, "Route not found");
             }
         } 
@@ -96,82 +96,48 @@ public class FrontServlet extends HttpServlet {
                           HttpServletResponse resp,
                           Map<String, String> pathParams) throws Exception {
 
-    System.out.println("\n=== INVOCATION DE LA MÉTHODE ===");
+        Class<?> clazz = Class.forName(mapping.getClassName());
+        Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
 
-    Class<?> clazz = Class.forName(mapping.getClassName());
-    Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+        Method targetMethod = null;
 
-    Method targetMethod = null;
-
-    // 1) Chercher une méthode compatible automatiquement
-    for (Method m : clazz.getDeclaredMethods()) {
-        if (!m.getName().equals(mapping.getMethodName())) continue;
-
-        int params = m.getParameterCount();
-
-        if (params == 0) { // hello()
+        for (Method m : clazz.getDeclaredMethods()) {
+            if (!m.getName().equals(mapping.getMethodName())) continue;
             targetMethod = m;
             break;
         }
 
-        if (params == 1 &&
-            m.getParameterTypes()[0] == HttpServletRequest.class) {
-            targetMethod = m;
-            break;
+        if (targetMethod == null) {
+            throw new RuntimeException("No compatible method found for: " + mapping.getMethodName());
         }
 
-        if (params == 2 &&
-            m.getParameterTypes()[0] == HttpServletRequest.class &&
-            m.getParameterTypes()[1] == HttpServletResponse.class) {
-            targetMethod = m;
-            break;
+        Class<?>[] paramTypes = targetMethod.getParameterTypes();
+        Object[] args = new Object[paramTypes.length];
+
+        for (int i = 0; i < paramTypes.length; i++) {
+            Class<?> type = paramTypes[i];
+
+            if (type == HttpServletRequest.class) args[i] = req;
+            else if (type == HttpServletResponse.class) args[i] = resp;
+            else if (type == Map.class) args[i] = pathParams;
+            else if (type == String.class) {
+                // Prendre le nom du paramètre
+                String paramName = targetMethod.getParameters()[i].getName();
+                String value = pathParams.get(paramName);
+                if (value == null) value = req.getParameter(paramName);
+                args[i] = value;
+            }
+            // Tu peux ajouter int, double, etc. plus tard
         }
 
-        if (params == 3 &&
-            m.getParameterTypes()[0] == HttpServletRequest.class &&
-            m.getParameterTypes()[1] == HttpServletResponse.class &&
-            m.getParameterTypes()[2] == Map.class) {
-            targetMethod = m;
-            break;
+        Object result = targetMethod.invoke(controllerInstance, args);
+
+        if (result instanceof String) {
+            resp.getWriter().write((String) result);
+        } else if (result instanceof ModelAndView) {
+            handleModelAndView((ModelAndView) result, req, resp);
         }
     }
-
-    if (targetMethod == null) {
-        throw new RuntimeException("No compatible method found for: " + mapping.getMethodName());
-    }
-
-    Object result;
-
-    // 2) Invocation selon le nombre de paramètres
-    switch (targetMethod.getParameterCount()) {
-        case 0:
-            result = targetMethod.invoke(controllerInstance);
-            break;
-
-        case 1:
-            result = targetMethod.invoke(controllerInstance, req);
-            break;
-
-        case 2:
-            result = targetMethod.invoke(controllerInstance, req, resp);
-            break;
-
-        case 3:
-            result = targetMethod.invoke(controllerInstance, req, resp, pathParams);
-            break;
-
-        default:
-            throw new RuntimeException("Unsupported method signature");
-    }
-
-    // 3) Gestion du retour
-    if (result instanceof String) {
-        resp.getWriter().write((String) result);
-    } 
-    else if (result instanceof ModelAndView) {
-        handleModelAndView((ModelAndView) result, req, resp);
-    }
-}
 
 
     @Override
@@ -180,7 +146,7 @@ public class FrontServlet extends HttpServlet {
 
         String requestPath = req.getServletPath();
         System.out.println("\n=== POST REÇU ===");
-        System.out.println("URL demandée : " + requestPath);
+        System.out.println("URL demandee : " + requestPath);
 
         Mapping mapping = null;
         Map<String, String> pathParams = new HashMap<>();
@@ -191,7 +157,7 @@ public class FrontServlet extends HttpServlet {
             System.out.println("Test du pattern : " + pattern);
 
             if (UrlMatcher.matches(pattern, requestPath)) {
-                System.out.println("✓ MATCH TROUVÉ !");
+                System.out.println(" MATCH TROUVE !");
                 mapping = entry.getValue();
                 pathParams = UrlMatcher.extractParams(pattern, requestPath);
                 break;
@@ -199,7 +165,7 @@ public class FrontServlet extends HttpServlet {
         }
 
         if (mapping == null) {
-            System.out.println("✗ AUCUN MAPPING TROUVÉ - 404");
+            System.out.println(" AUCUN MAPPING TROUVE - 404");
             resp.sendError(404, "Route not found (POST)");
             return;
         }
