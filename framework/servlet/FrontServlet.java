@@ -1,5 +1,6 @@
 package framework.servlet;
 
+import framework.annotation.RequestParam;
 import framework.helpers.ComponentScan;
 import framework.helpers.Mapping;
 import framework.helpers.ModelAndView;
@@ -100,11 +101,11 @@ public class FrontServlet extends HttpServlet {
         Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
 
         Method targetMethod = null;
-
         for (Method m : clazz.getDeclaredMethods()) {
-            if (!m.getName().equals(mapping.getMethodName())) continue;
-            targetMethod = m;
-            break;
+            if (m.getName().equals(mapping.getMethodName())) {
+                targetMethod = m;
+                break;
+            }
         }
 
         if (targetMethod == null) {
@@ -114,30 +115,43 @@ public class FrontServlet extends HttpServlet {
         Class<?>[] paramTypes = targetMethod.getParameterTypes();
         Object[] args = new Object[paramTypes.length];
 
+        java.lang.reflect.Parameter[] parameters = targetMethod.getParameters();
+
         for (int i = 0; i < paramTypes.length; i++) {
             Class<?> type = paramTypes[i];
+            java.lang.reflect.Parameter param = parameters[i];
 
-            if (type == HttpServletRequest.class) args[i] = req;
-            else if (type == HttpServletResponse.class) args[i] = resp;
-            else if (type == Map.class) args[i] = pathParams;
-            else if (type == String.class) {
-                // Prendre le nom du paramètre
-                String paramName = targetMethod.getParameters()[i].getName();
-                String value = pathParams.get(paramName);
-                if (value == null) value = req.getParameter(paramName);
+            if (type == HttpServletRequest.class) {
+                args[i] = req;
+            } else if (type == HttpServletResponse.class) {
+                args[i] = resp;
+            } else if (type == Map.class) {
+                args[i] = pathParams;
+            } else if (type == String.class) {
+                // Vérifier annotation @RequestParam
+                RequestParam rp = param.getAnnotation(RequestParam.class);
+                String value = null;
+                if (rp != null) {
+                    value = req.getParameter(rp.value());
+                } else {
+                    // fallback : essayer pathParams ou nom du paramètre
+                    value = pathParams.get(param.getName());
+                    if (value == null) value = req.getParameter(param.getName());
+                }
                 args[i] = value;
             }
-            // Tu peux ajouter int, double, etc. plus tard
+            // tu peux ajouter int, double, etc.
         }
 
-        Object result = targetMethod.invoke(controllerInstance, args);
+    Object result = targetMethod.invoke(controllerInstance, args);
 
-        if (result instanceof String) {
-            resp.getWriter().write((String) result);
-        } else if (result instanceof ModelAndView) {
-            handleModelAndView((ModelAndView) result, req, resp);
-        }
+    if (result instanceof String) {
+        handleStringResponse((String) result, resp);
+    } else if (result instanceof ModelAndView) {
+        handleModelAndView((ModelAndView) result, req, resp);
     }
+}
+
 
 
     @Override
