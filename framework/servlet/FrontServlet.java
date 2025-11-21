@@ -3,7 +3,7 @@ package framework.servlet;
 import framework.helpers.ComponentScan;
 import framework.helpers.Mapping;
 import framework.helpers.ModelAndView;
-
+import framework.helpers.UrlMatcher;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 
 public class FrontServlet extends HttpServlet {
@@ -33,6 +34,11 @@ public class FrontServlet extends HttpServlet {
         
         try {
             urlMappings = ComponentScan.scanControllers(controllerPackage);
+               for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
+                System.out.println(entry.getKey() + " -> " + 
+                                   entry.getValue().getClassName() + "." + 
+                                   entry.getValue().getMethodName());
+            }
             System.out.println("Mappings loaded: " + urlMappings.keySet());
         } catch (Exception e) {
             e.printStackTrace();
@@ -40,8 +46,80 @@ public class FrontServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        processRequest(req, resp);
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+    throws ServletException, IOException {
+    
+        String requestPath = request.getServletPath();
+        System.out.println("\n=== REQUÊTE REÇUE ===");
+        System.out.println("URL demandée : " + requestPath);
+        
+        // CHERCHER UN MAPPING CORRESPONDANT
+        Mapping mapping = null;
+        Map<String, String> pathParams = new HashMap<>();
+        
+        System.out.println("\n=== RECHERCHE DU MAPPING ===");
+        for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
+            String pattern = entry.getKey();
+            System.out.println("Test du pattern : " + pattern);
+            
+            if (UrlMatcher.matches(pattern, requestPath)) {
+                System.out.println("✓ MATCH TROUVÉ !");
+                mapping = entry.getValue();
+                pathParams = UrlMatcher.extractParams(pattern, requestPath);
+                break;
+            } else {
+                System.out.println("✗ Pas de match");
+            }
+        }
+        try {
+            
+            if (mapping != null) {
+                System.out.println("\n=== PARAMÈTRES EXTRAITS ===");
+                for (Map.Entry<String, String> param : pathParams.entrySet()) {
+                    System.out.println(param.getKey() + " = " + param.getValue());
+                }
+                
+                // INVOQUER LA MÉTHODE
+                invokeMethod(mapping, request, response, pathParams);
+            } else {
+                System.out.println("✗ AUCUN MAPPING TROUVÉ - 404");
+                response.sendError(404, "Route not found");
+            }
+        } 
+        catch (Exception e) {
+            // TODO: handle exception
+        }
+    }
+
+    private void invokeMethod(Mapping mapping, 
+                            HttpServletRequest req, 
+                            HttpServletResponse resp,
+                            Map<String, String> pathParams) throws Exception {
+        
+        System.out.println("\n=== INVOCATION DE LA MÉTHODE ===");
+        System.out.println("Classe : " + mapping.getClassName());
+        System.out.println("Méthode : " + mapping.getMethodName());
+        
+        // Charger la classe
+        Class<?> clazz = Class.forName(mapping.getClassName());
+        System.out.println("✓ Classe chargée");
+        
+        // Créer une instance du controller
+        Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+        System.out.println("✓ Instance créée : " + controllerInstance);
+        
+        // Récupérer la méthode
+        Method method = clazz.getMethod(
+            mapping.getMethodName(),
+            HttpServletRequest.class,
+            HttpServletResponse.class,
+            Map.class
+        );
+        System.out.println("✓ Méthode trouvée : " + method.getName());
+        
+        // INVOQUER LA MÉTHODE
+        System.out.println("✓ Invocation de la méthode...\n");
+        method.invoke(controllerInstance, req, resp, pathParams);
     }
 
     @Override

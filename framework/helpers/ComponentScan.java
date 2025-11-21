@@ -107,7 +107,7 @@ public class ComponentScan {
                     }
 
                     if (fullPath != null) {
-                        Mapping mapping = new Mapping(className, method.getName());
+                        Mapping mapping = new Mapping(className, method.getName(),fullPath);
                         mappings.put(fullPath, mapping);
                         System.out.println("Mapped: " + fullPath + " -> " + className + "." + method.getName());
                     }
