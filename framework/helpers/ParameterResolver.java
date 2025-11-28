@@ -7,20 +7,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.Map;
 
-/**
- * Classe responsable de la résolution des paramètres des méthodes de contrôleur
- */
+
 public class ParameterResolver {
     
-    /**
-     * Résout tous les paramètres nécessaires pour invoquer une méthode
-     * 
-     * @param method La méthode à invoquer
-     * @param request La requête HTTP
-     * @param response La réponse HTTP
-     * @param pathParams Les paramètres extraits de l'URL (ex: /user/{id})
-     * @return Un tableau d'objets contenant les valeurs des paramètres
-     */
+
     public Object[] resolveParameters(Method method, 
                                       HttpServletRequest request,
                                       HttpServletResponse response,
@@ -34,34 +24,31 @@ public class ParameterResolver {
         for (int i = 0; i < parameters.length; i++) {
             Parameter param = parameters[i];
             Class<?> paramType = param.getType();
-            
-            // CAS 1: HttpServletRequest
+
             if (paramType == HttpServletRequest.class) {
                 resolvedParams[i] = request;
                 System.out.println("  [" + i + "] HttpServletRequest injecte");
                 continue;
             }
             
-            // CAS 2: HttpServletResponse
+
             if (paramType == HttpServletResponse.class) {
                 resolvedParams[i] = response;
                 System.out.println("  [" + i + "] HttpServletResponse injecte");
                 continue;
             }
             
-            // CAS 3: Map (pathParams)
+
             if (paramType == Map.class) {
                 resolvedParams[i] = pathParams;
                 System.out.println("  [" + i + "] Map<String,String> (pathParams) injecte");
                 continue;
             }
-            
-            // CAS 4: Paramètres de formulaire/query avec @RequestParam ou par nom
+
             String paramName = null;
             boolean required = true;
             String defaultValue = "";
-            
-            // Vérifier si @RequestParam est présent
+
             if (param.isAnnotationPresent(RequestParam.class)) {
                 RequestParam annotation = param.getAnnotation(RequestParam.class);
                 paramName = annotation.value();
@@ -69,41 +56,54 @@ public class ParameterResolver {
                 defaultValue = annotation.defaultValue();
                 System.out.println("  [" + i + "] @RequestParam detecte: " + paramName);
             } else {
-                // Pas d'annotation: utiliser le nom de la variable Java
+               
                 paramName = param.getName();
                 System.out.println("  [" + i + "] Parametre sans annotation: " + paramName);
+                
+             
+                if (paramName.startsWith("arg")) {
+                    System.out.println("      ATTENTION: Nom générique détecté (" + paramName + ")");
+                    System.out.println("      Conseil: Compilez avec -parameters ou utilisez @RequestParam");
+                    
+             
+                    Map<String, String[]> allParams = request.getParameterMap();
+                    if (!allParams.isEmpty()) {
+                        paramName = allParams.keySet().iterator().next();
+                        System.out.println("      Tentative avec le premier paramètre trouvé: " + paramName);
+                        required = false; 
+                    }
+                }
             }
             
-            // Chercher la valeur dans les paramètres de requête
+  
             String paramValue = request.getParameter(paramName);
             
-            // Si pas trouvé, chercher dans pathParams
+
             if (paramValue == null && pathParams != null) {
                 paramValue = pathParams.get(paramName);
             }
             
-            // Gérer les valeurs manquantes
+
             if (paramValue == null || paramValue.isEmpty()) {
                 if (required && defaultValue.isEmpty()) {
                     throw new IllegalArgumentException(
-                        "Parametre requis manquant: " + paramName
+                        "Parametre requis manquant: " + paramName + 
+                        "\nSolution 1: Compilez avec l'option -parameters" +
+                        "\nSolution 2: Utilisez @RequestParam(\"" + paramName + "\")"
                     );
                 }
                 paramValue = defaultValue.isEmpty() ? null : defaultValue;
             }
             
-            System.out.println("      Valeur trouvee: " + paramValue);
+            System.out.println("  Valeur trouvee: " + paramValue);
             
-            // Convertir en type approprié
+      
             resolvedParams[i] = convertParameter(paramValue, paramType, paramName);
         }
         
         return resolvedParams;
     }
-    
-    /**
-     * Convertit une valeur String en type Java approprié
-     */
+
     private Object convertParameter(String value, Class<?> targetType, String paramName) {
         if (value == null) {
             return getDefaultValue(targetType);
@@ -126,18 +126,18 @@ public class ParameterResolver {
                 return Float.parseFloat(value);
             } 
             else if (targetType == boolean.class || targetType == Boolean.class) {
-                // Accepter "true", "1", "on", "yes"
+           
                 return value.equalsIgnoreCase("true") 
                     || value.equals("1") 
                     || value.equalsIgnoreCase("on")
                     || value.equalsIgnoreCase("yes");
             } 
             else if (targetType == String[].class) {
-                // Pour les checkboxes multiples ou select multiple
+        
                 return value.split(",");
             }
             else {
-                // Type non supporté, retourner en String
+                
                 System.out.println("      ATTENTION: Type " + targetType.getSimpleName() + 
                                  " non supporté, retourne String");
                 return value;
@@ -150,9 +150,7 @@ public class ParameterResolver {
         }
     }
     
-    /**
-     * Retourne la valeur par défaut pour un type primitif
-     */
+
     private Object getDefaultValue(Class<?> type) {
         if (type == int.class) return 0;
         if (type == long.class) return 0L;
