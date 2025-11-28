@@ -10,5 +10,5 @@ import java.lang.annotation.ElementType;
 
 public @interface Controller {
 
-    String value();
+    String value() default "";
 }

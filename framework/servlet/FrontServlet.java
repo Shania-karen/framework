@@ -1,10 +1,10 @@
 package framework.servlet;
 
-import framework.annotation.RequestParam;
 import framework.helpers.ComponentScan;
 import framework.helpers.Mapping;
 import framework.helpers.ModelAndView;
 import framework.helpers.UrlMatcher;
+import framework.helpers.ParameterResolver;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
@@ -20,12 +20,16 @@ public class FrontServlet extends HttpServlet {
 
     private Map<String, Mapping> urlMappings;
     private String controllerPackage;
-
+    private ParameterResolver parameterResolver; 
     @Override
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
+        
+ 
+        parameterResolver = new ParameterResolver();
+        
         controllerPackage = config.getInitParameter("controller-package");
-        System.out.println("FrontServlet initializeeeeed!");
+        System.out.println("FrontServlet initialized!");
         System.out.println("Scanning package: " + controllerPackage);  
         
         if (controllerPackage == null || controllerPackage.isEmpty()) {
@@ -35,7 +39,7 @@ public class FrontServlet extends HttpServlet {
         
         try {
             urlMappings = ComponentScan.scanControllers(controllerPackage);
-               for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
+            for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
                 System.out.println(entry.getKey() + " -> " + 
                                    entry.getValue().getClassName() + "." + 
                                    entry.getValue().getMethodName());
@@ -48,11 +52,26 @@ public class FrontServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) 
-    throws ServletException, IOException {
-    
+            throws ServletException, IOException {
+        processRequest(request, response);
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) 
+            throws ServletException, IOException {
+        processRequest(request, response);
+    }
+
+    /**
+     * Méthode unifiée pour traiter GET et POST
+     */
+    private void processRequest(HttpServletRequest request, HttpServletResponse response) 
+            throws ServletException, IOException {
+        
         String requestPath = request.getServletPath();
         System.out.println("\n=== REQUETE REÇUE ===");
-        System.out.println("URL demandee : " + requestPath);
+        System.out.println("Methode HTTP: " + request.getMethod());
+        System.out.println("URL demandee: " + requestPath);
         
         // CHERCHER UN MAPPING CORRESPONDANT
         Mapping mapping = null;
@@ -61,45 +80,56 @@ public class FrontServlet extends HttpServlet {
         System.out.println("\n=== RECHERCHE DU MAPPING ===");
         for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
             String pattern = entry.getKey();
-            System.out.println("Test du pattern : " + pattern);
+            System.out.println("Test du pattern: " + pattern);
             
             if (UrlMatcher.matches(pattern, requestPath)) {
-                System.out.println(" MATCH TROUVE !");
+                System.out.println("✓ MATCH TROUVE!");
                 mapping = entry.getValue();
                 pathParams = UrlMatcher.extractParams(pattern, requestPath);
                 break;
             } else {
-                System.out.println(" Pas de match");
+                System.out.println("✗ Pas de match");
             }
         }
+        
         try {
-            
             if (mapping != null) {
-                System.out.println("\n=== PARAMETRES EXTRAITS ===");
+                System.out.println("\n=== PARAMETRES EXTRAITS DES PATH ===");
                 for (Map.Entry<String, String> param : pathParams.entrySet()) {
                     System.out.println(param.getKey() + " = " + param.getValue());
                 }
                 
-                // INVOQUER LA MÉTHODE
+                // INVOQUER LA MÉTHODE AVEC LE PARAMETER RESOLVER
                 invokeMethod(mapping, request, response, pathParams);
             } else {
                 System.out.println("✗ AUCUN MAPPING TROUVE - 404");
-                response.sendError(404, "Route not found");
+                response.sendError(HttpServletResponse.SC_NOT_FOUND, 
+                    "Route not found: " + requestPath);
             }
-        } 
-        catch (Exception e) {
-            // TODO: handle exception
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
+                "Error: " + e.getMessage());
         }
     }
 
+    /**
+     * Invoque la méthode du contrôleur avec résolution automatique des paramètres
+     */
     private void invokeMethod(Mapping mapping, 
-                          HttpServletRequest req, 
-                          HttpServletResponse resp,
-                          Map<String, String> pathParams) throws Exception {
+                              HttpServletRequest request, 
+                              HttpServletResponse response,
+                              Map<String, String> pathParams) throws Exception {
 
+        System.out.println("\n=== INVOCATION DE LA METHODE ===");
+        System.out.println("Classe: " + mapping.getClassName());
+        System.out.println("Methode: " + mapping.getMethodName());
+
+        // Charger la classe du contrôleur
         Class<?> clazz = Class.forName(mapping.getClassName());
         Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
 
+        // Trouver la méthode
         Method targetMethod = null;
         for (Method m : clazz.getDeclaredMethods()) {
             if (m.getName().equals(mapping.getMethodName())) {
@@ -109,172 +139,86 @@ public class FrontServlet extends HttpServlet {
         }
 
         if (targetMethod == null) {
-            throw new RuntimeException("No compatible method found for: " + mapping.getMethodName());
+            throw new RuntimeException("Method not found: " + mapping.getMethodName());
         }
 
-        Class<?>[] paramTypes = targetMethod.getParameterTypes();
-        Object[] args = new Object[paramTypes.length];
+        System.out.println("\n=== RESOLUTION DES PARAMETRES ===");
+        
+        // UTILISER LE PARAMETER RESOLVER POUR RÉSOUDRE LES PARAMÈTRES
+        Object[] args = parameterResolver.resolveParameters(
+            targetMethod, 
+            request, 
+            response, 
+            pathParams
+        );
 
-        java.lang.reflect.Parameter[] parameters = targetMethod.getParameters();
-
-        for (int i = 0; i < paramTypes.length; i++) {
-            Class<?> type = paramTypes[i];
-            java.lang.reflect.Parameter param = parameters[i];
-
-            if (type == HttpServletRequest.class) {
-                args[i] = req;
-            } else if (type == HttpServletResponse.class) {
-                args[i] = resp;
-            } else if (type == Map.class) {
-                args[i] = pathParams;
-            } else if (type == String.class) {
-                // Vérifier annotation @RequestParam
-                RequestParam rp = param.getAnnotation(RequestParam.class);
-                String value = null;
-                if (rp != null) {
-                    value = req.getParameter(rp.value());
-                } else {
-                    // fallback : essayer pathParams ou nom du paramètre
-                    value = pathParams.get(param.getName());
-                    if (value == null) value = req.getParameter(param.getName());
-                }
-                args[i] = value;
-            }
-            // tu peux ajouter int, double, etc.
+        System.out.println("Nombre de parametres resolus: " + args.length);
+        for (int i = 0; i < args.length; i++) {
+            System.out.println("  Param[" + i + "]: " + 
+                (args[i] != null ? args[i].toString() : "null") + 
+                " (" + (args[i] != null ? args[i].getClass().getSimpleName() : "null") + ")");
         }
 
-    Object result = targetMethod.invoke(controllerInstance, args);
+        // INVOQUER LA MÉTHODE AVEC LES PARAMÈTRES RÉSOLUS
+        Object result = targetMethod.invoke(controllerInstance, args);
 
-    if (result instanceof String) {
-        handleStringResponse((String) result, resp);
-    } else if (result instanceof ModelAndView) {
-        handleModelAndView((ModelAndView) result, req, resp);
-    }
-}
+        System.out.println("\n=== TRAITEMENT DU RESULTAT ===");
+        System.out.println("Type de retour: " + 
+            (result != null ? result.getClass().getSimpleName() : "void"));
 
-
-
-    @Override
-    
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-
-        String requestPath = req.getServletPath();
-        System.out.println("\n=== POST REÇU ===");
-        System.out.println("URL demandee : " + requestPath);
-
-        Mapping mapping = null;
-        Map<String, String> pathParams = new HashMap<>();
-
-        System.out.println("\n=== RECHERCHE DU MAPPING (POST) ===");
-        for (Map.Entry<String, Mapping> entry : urlMappings.entrySet()) {
-            String pattern = entry.getKey();
-            System.out.println("Test du pattern : " + pattern);
-
-            if (UrlMatcher.matches(pattern, requestPath)) {
-                System.out.println(" MATCH TROUVE !");
-                mapping = entry.getValue();
-                pathParams = UrlMatcher.extractParams(pattern, requestPath);
-                break;
-            }
-        }
-
-        if (mapping == null) {
-            System.out.println(" AUCUN MAPPING TROUVE - 404");
-            resp.sendError(404, "Route not found (POST)");
-            return;
-        }
-
-        try {
-            invokeMethod(mapping, req, resp, pathParams);
-        } catch (Exception e) {
-            e.printStackTrace();
-            resp.sendError(500, "Server error: " + e.getMessage());
+        // GÉRER LE RÉSULTAT
+        if (result instanceof String) {
+            handleStringResponse((String) result, request, response);
+        } else if (result instanceof ModelAndView) {
+            handleModelAndView((ModelAndView) result, request, response);
+        } else if (result != null) {
+            handleStringResponse(result.toString(), request, response);
         }
     }
 
-
-    private void processRequest(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        String path = req.getRequestURI().substring(req.getContextPath().length());
-        System.out.println("Computed path = " + path);
+    /**
+     * Gère les réponses de type String (vue ou redirection)
+     */
+    private void handleStringResponse(String viewName, 
+                                       HttpServletRequest request,
+                                       HttpServletResponse response) 
+            throws ServletException, IOException {
         
-        Mapping mapping = urlMappings.get(path);
-        
-        if (mapping != null) {
-            try {
-                // Charger la classe du contrôleur
-                Class<?> controllerClass = Class.forName(mapping.getClassName());
-                
-                // Créer une instance du contrôleur
-                Object controllerInstance = controllerClass.getDeclaredConstructor().newInstance();
-                
-                // Récupérer la méthode avec ses paramètres
-                Method method = null;
-                for (Method m : controllerClass.getDeclaredMethods()) {
-                    if (m.getName().equals(mapping.getMethodName())) {
-                        method = m;
-                        break;
-                    }
-                }
-                
-                if (method == null) {
-                    resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Method not found");
-                    return;
-                }
-                
-                // Invoquer selon le nombre de paramètres
-                Object result;
-                if (method.getParameterCount() == 0) {
-                    result = method.invoke(controllerInstance);
-                } else if (method.getParameterCount() == 2) {
-                    result = method.invoke(controllerInstance, req, resp);
-                } else {
-                    resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
-                        "Unsupported method signature");
-                    return;
-                }
-                System.out.println("Method invoked, result: " + result);
-                // Gérer le résultat selon son type
-                if (result instanceof ModelAndView) {
-                    handleModelAndView((ModelAndView) result, req, resp);
-                } else if (result instanceof String) {
-                    handleStringResponse((String) result, resp);
-                } else if (result != null) {
-                    handleStringResponse(result.toString(), resp);
-                } else {
-                    handleStringResponse("Method executed successfully (no return value)", resp);
-                }
-                
-                System.out.println("Method executed: " + mapping.getClassName() + "." + mapping.getMethodName());
-                
-            } catch (Exception e) {
-                e.printStackTrace();
-                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
-                    "Error executing method: " + e.getMessage());
-            }
+        if (viewName.startsWith("redirect:")) {
+            // REDIRECTION
+            String redirectUrl = viewName.substring("redirect:".length());
+            System.out.println("Redirection vers: " + redirectUrl);
+            response.sendRedirect(request.getContextPath() + redirectUrl);
         } else {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "URL not found: " + path);
+            // FORWARD VERS JSP
+            String viewPath = "/WEB-INF/views/" + viewName + ".jsp";
+            System.out.println("Forward vers: " + viewPath);
+            RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
+            dispatcher.forward(request, response);
         }
     }
 
-    private void handleModelAndView(ModelAndView mav, HttpServletRequest req, HttpServletResponse resp) 
+    /**
+     * Gère les réponses de type ModelAndView
+     */
+    private void handleModelAndView(ModelAndView mav, 
+                                     HttpServletRequest request, 
+                                     HttpServletResponse response) 
             throws ServletException, IOException {
         
         System.out.println("=== Handling ModelAndView ===");
         System.out.println("View name: " + mav.getViewName());
+        
+        // Ajouter les attributs du modèle à la requête
         for (Map.Entry<String, Object> entry : mav.getModel().entrySet()) {
-            req.setAttribute(entry.getKey(), entry.getValue());
+            System.out.println("Attribut: " + entry.getKey() + " = " + entry.getValue());
+            request.setAttribute(entry.getKey(), entry.getValue());
         }
         
         // Forward vers la vue JSP
         String viewPath = "/WEB-INF/views/" + mav.getViewName() + ".jsp";
         System.out.println("Forwarding to: " + viewPath);
-        RequestDispatcher dispatcher = req.getRequestDispatcher(viewPath);
-        dispatcher.forward(req, resp);
-    }
-
-    private void handleStringResponse(String content, HttpServletResponse resp) throws IOException {
-        resp.setContentType("text/html");
-        resp.setCharacterEncoding("UTF-8");
-        resp.getWriter().write(content);
+        RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
+        dispatcher.forward(request, response);
     }
 }

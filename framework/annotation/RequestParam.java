@@ -6,5 +6,7 @@ import java.lang.annotation.*;
 @Target(ElementType.PARAMETER)
 public @interface RequestParam {
     String value(); 
+    boolean required() default true;
+    String defaultValue() default "";
 }
 
