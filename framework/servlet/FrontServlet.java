@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -134,6 +135,17 @@ public class FrontServlet extends HttpServlet {
             targetMethod = m;
             break;
         }
+        if(params==1 &&
+           m.getParameterTypes()[0]==Map.class){
+            targetMethod = m;
+            break;
+        }
+        if(params==2 &&
+           m.getParameterTypes()[0]==Map.class &&
+           m.getParameterTypes()[1]==HttpServletResponse.class){
+            targetMethod = m;
+            break;
+        }
     }
 
     if (targetMethod == null) {
@@ -142,8 +154,30 @@ public class FrontServlet extends HttpServlet {
 
     Object result;
 
+    Map<String , Object> model = new HashMap<>();
+    if("GET".equals(req.getMethod()) || "POST".equals(req.getMethod())){
+    Enumeration<String> paramNames = req.getParameterNames();
+    while(paramNames.hasMoreElements()){
+        String key= paramNames.nextElement();
+        String value = req.getParameter(key);
+        Object parsedValue;
+        try{
+            parsedValue = Integer.parseInt(value);
+        } catch(NumberFormatException e){
+            try{
+                parsedValue = Double.parseDouble(value);
+            } catch(NumberFormatException ex){
+                parsedValue = value;
+            }
+        }
+        model.put(key, parsedValue);    
+    }
+}
+
+
     // 2) Invocation selon le nombre de paramètres
     switch (targetMethod.getParameterCount()) {
+        
         case 0:
             result = targetMethod.invoke(controllerInstance);
             break;
@@ -159,7 +193,25 @@ public class FrontServlet extends HttpServlet {
         case 3:
             result = targetMethod.invoke(controllerInstance, req, resp, pathParams);
             break;
-
+        case 4: 
+        if(targetMethod.getParameterTypes()[0] == Map.class){
+            result = targetMethod.invoke(controllerInstance, model);    
+            break;
+        }
+        else{
+            result = targetMethod.invoke(controllerInstance,req);    
+            break;
+        }
+        case 5:
+        if(targetMethod.getParameterTypes()[1] == Map.class){
+            result = targetMethod.invoke(controllerInstance, model, req, model);    
+            break;
+        }
+        else{
+            result = targetMethod.invoke(controllerInstance, req, resp);    
+            break;
+        }
+   
         default:
             throw new RuntimeException("Unsupported method signature");
     }
