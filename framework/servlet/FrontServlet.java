@@ -46,6 +46,75 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
+private Object bindToObject(Class<?> clazz, Map<String, Object> model) throws Exception {
+    Object instance = clazz.getDeclaredConstructor().newInstance();
+
+    for (Map.Entry<String, Object> entry : model.entrySet()) {
+        String key = entry.getKey();
+        Object value = entry.getValue();
+
+        if (!key.contains(".")) {
+            try {
+                Method setter = findSetter(clazz, key, value);
+                setter.invoke(instance, convertType(value, setter.getParameterTypes()[0]));
+            } catch (NoSuchMethodException e) {
+                // ignorer si pas de setter
+            }
+        } else {
+            String[] parts = key.split("\\.");
+            String objectName = parts[0];
+            String fieldName  = parts[1];
+
+            Method getter = clazz.getMethod("get" + capitalize(objectName));
+            Object subObj = getter.invoke(instance);
+
+            if (subObj == null) {
+                Class<?> subClass = getter.getReturnType();
+                subObj = subClass.getDeclaredConstructor().newInstance();
+                Method setter = clazz.getMethod("set" + capitalize(objectName), subClass);
+                setter.invoke(instance, subObj);
+            }
+
+            Method subSetter = findSetter(subObj.getClass(), fieldName, value);
+            subSetter.invoke(subObj, convertType(value, subSetter.getParameterTypes()[0]));
+        }
+    }
+
+    return instance;
+}
+
+// Chercher le setter en ignorant la différence entre Integer et int
+private Method findSetter(Class<?> clazz, String fieldName, Object value) throws NoSuchMethodException {
+    String setterName = "set" + capitalize(fieldName);
+    for (Method m : clazz.getMethods()) {
+        if (m.getName().equals(setterName) && m.getParameterCount() == 1) {
+            return m;
+        }
+    }
+    throw new NoSuchMethodException(setterName);
+}
+
+// Convertir Integer -> int, Double -> double etc.
+private Object convertType(Object value, Class<?> targetType) {
+    if (targetType.isPrimitive()) {
+        if (targetType == int.class) return ((Number) value).intValue();
+        if (targetType == long.class) return ((Number) value).longValue();
+        if (targetType == double.class) return ((Number) value).doubleValue();
+        if (targetType == float.class) return ((Number) value).floatValue();
+        if (targetType == boolean.class) return value;
+        if (targetType == char.class) return value;
+        if (targetType == short.class) return ((Number) value).shortValue();
+        if (targetType == byte.class) return ((Number) value).byteValue();
+    }
+    return value;
+}
+
+
+private String capitalize(String s) {
+    return s.substring(0, 1).toUpperCase() + s.substring(1);
+}
+
+
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) 
     throws ServletException, IOException {
@@ -92,7 +161,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-    private void invokeMethod(Mapping mapping, 
+   private void invokeMethod(Mapping mapping, 
                           HttpServletRequest req, 
                           HttpServletResponse resp,
                           Map<String, String> pathParams) throws Exception {
@@ -104,21 +173,27 @@ public class FrontServlet extends HttpServlet {
 
     Method targetMethod = null;
 
-    // 1) Chercher une méthode compatible automatiquement
+    // 1) Chercher la méthode correspondant au mapping
     for (Method m : clazz.getDeclaredMethods()) {
         if (!m.getName().equals(mapping.getMethodName())) continue;
 
         int params = m.getParameterCount();
 
-        if (params == 0) { // hello()
+        if (params == 0) { // méthode vide
             targetMethod = m;
             break;
         }
 
-        if (params == 1 &&
-            m.getParameterTypes()[0] == HttpServletRequest.class) {
-            targetMethod = m;
-            break;
+        if (params == 1) {
+            Class<?> paramType = m.getParameterTypes()[0];
+            if (paramType == HttpServletRequest.class || paramType == Map.class) {
+                targetMethod = m;
+                break;
+            } else {
+                // Cas objet personnalisé (ex: Employe)
+                targetMethod = m;
+                break;
+            }
         }
 
         if (params == 2 &&
@@ -135,27 +210,14 @@ public class FrontServlet extends HttpServlet {
             targetMethod = m;
             break;
         }
-        if(params==1 &&
-           m.getParameterTypes()[0]==Map.class){
-            targetMethod = m;
-            break;
-        }
-        if(params==2 &&
-           m.getParameterTypes()[0]==Map.class &&
-           m.getParameterTypes()[1]==HttpServletResponse.class){
-            targetMethod = m;
-            break;
-        }
     }
 
     if (targetMethod == null) {
         throw new RuntimeException("No compatible method found for: " + mapping.getMethodName());
     }
 
-    Object result;
-
-    Map<String , Object> model = new HashMap<>();
-    if("GET".equals(req.getMethod()) || "POST".equals(req.getMethod())){
+    // 2) Créer un modèle de paramètres depuis la requête
+    Map<String, Object> model = new HashMap<>();
     Enumeration<String> paramNames = req.getParameterNames();
     while(paramNames.hasMoreElements()){
         String key= paramNames.nextElement();
@@ -172,55 +234,41 @@ public class FrontServlet extends HttpServlet {
         }
         model.put(key, parsedValue);    
     }
-}
 
+    // 3) Invocation selon le type de paramètre
+    Object result;
 
-    // 2) Invocation selon le nombre de paramètres
-    switch (targetMethod.getParameterCount()) {
-        
-        case 0:
-            result = targetMethod.invoke(controllerInstance);
-            break;
-
-        case 1:
+    int paramCount = targetMethod.getParameterCount();
+    if (paramCount == 0) {
+        result = targetMethod.invoke(controllerInstance);
+    } else if (paramCount == 1) {
+        Class<?> paramType = targetMethod.getParameterTypes()[0];
+        if (paramType == HttpServletRequest.class) {
             result = targetMethod.invoke(controllerInstance, req);
-            break;
-
-        case 2:
-            result = targetMethod.invoke(controllerInstance, req, resp);
-            break;
-
-        case 3:
-            result = targetMethod.invoke(controllerInstance, req, resp, pathParams);
-            break;
-        case 4: 
-        if(targetMethod.getParameterTypes()[0] == Map.class){
-            result = targetMethod.invoke(controllerInstance, model);    
-            break;
+        } else if (paramType == Map.class) {
+            result = targetMethod.invoke(controllerInstance, model);
+        } else {
+            // Objet personnalisé
+            Object obj = bindToObject(paramType, model);
+            result = targetMethod.invoke(controllerInstance, obj);
         }
-        else{
-            result = targetMethod.invoke(controllerInstance,req);    
-            break;
-        }
-        case 5:
-        if(targetMethod.getParameterTypes()[1] == Map.class){
-            result = targetMethod.invoke(controllerInstance, model, req, model);    
-            break;
-        }
-        else{
-            result = targetMethod.invoke(controllerInstance, req, resp);    
-            break;
-        }
-   
-        default:
-            throw new RuntimeException("Unsupported method signature");
+    } else if (paramCount == 2 &&
+               targetMethod.getParameterTypes()[0] == HttpServletRequest.class &&
+               targetMethod.getParameterTypes()[1] == HttpServletResponse.class) {
+        result = targetMethod.invoke(controllerInstance, req, resp);
+    } else if (paramCount == 3 &&
+               targetMethod.getParameterTypes()[0] == HttpServletRequest.class &&
+               targetMethod.getParameterTypes()[1] == HttpServletResponse.class &&
+               targetMethod.getParameterTypes()[2] == Map.class) {
+        result = targetMethod.invoke(controllerInstance, req, resp, model);
+    } else {
+        throw new RuntimeException("Unsupported method signature for: " + mapping.getMethodName());
     }
 
-    // 3) Gestion du retour
+    // 4) Gestion du retour
     if (result instanceof String) {
         resp.getWriter().write((String) result);
-    } 
-    else if (result instanceof ModelAndView) {
+    } else if (result instanceof ModelAndView) {
         handleModelAndView((ModelAndView) result, req, resp);
     }
 }

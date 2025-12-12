@@ -2,7 +2,7 @@ package framework.helpers;
 
 import framework.annotation.Controller;
 import framework.annotation.Get;
-import framework.annotation.NestedObject;
+
 import framework.annotation.Post;
 
 import java.io.File;
@@ -113,11 +113,6 @@ public class ComponentScan {
                         System.out.println("Mapped: " + fullPath + " -> " + className + "." + method.getName());
                     }
                 }
-            }
-            if(clazz.isAnnotationPresent(NestedObject.class)){
-                System.out.println("Found NestedObject class: " + className);
-                NestedObject nestedObjectAnnotation = clazz.getAnnotation(NestedObject.class);
-                
             }
         } catch (ClassNotFoundException e) {
             System.err.println("Could not load class: " + className);
