@@ -179,7 +179,7 @@ private String capitalize(String s) {
 
         int params = m.getParameterCount();
 
-        if (params == 0) { // méthode vide
+        if (params == 0) {
             targetMethod = m;
             break;
         }
@@ -190,7 +190,6 @@ private String capitalize(String s) {
                 targetMethod = m;
                 break;
             } else {
-                // Cas objet personnalisé (ex: Employe)
                 targetMethod = m;
                 break;
             }
@@ -237,7 +236,6 @@ private String capitalize(String s) {
 
     // 3) Invocation selon le type de paramètre
     Object result;
-
     int paramCount = targetMethod.getParameterCount();
     if (paramCount == 0) {
         result = targetMethod.invoke(controllerInstance);
@@ -248,7 +246,6 @@ private String capitalize(String s) {
         } else if (paramType == Map.class) {
             result = targetMethod.invoke(controllerInstance, model);
         } else {
-            // Objet personnalisé
             Object obj = bindToObject(paramType, model);
             result = targetMethod.invoke(controllerInstance, obj);
         }
@@ -265,11 +262,21 @@ private String capitalize(String s) {
         throw new RuntimeException("Unsupported method signature for: " + mapping.getMethodName());
     }
 
-    // 4) Gestion du retour
-    if (result instanceof String) {
-        resp.getWriter().write((String) result);
-    } else if (result instanceof ModelAndView) {
+  
+    boolean isRestController = clazz.isAnnotationPresent(framework.annotation.RestController.class);
+    boolean methodResponseBody = targetMethod.isAnnotationPresent(framework.annotation.ResponseBody.class);
+    boolean shouldReturnJson = isRestController || methodResponseBody;
+
+    if (result instanceof ModelAndView) {
         handleModelAndView((ModelAndView) result, req, resp);
+    } else if (shouldReturnJson) {
+        // Sérialiser en JSON
+        resp.setContentType("application/json");
+        resp.setCharacterEncoding("UTF-8");
+        String json = new com.google.gson.Gson().toJson(result);
+        resp.getWriter().write(json);
+    } else {
+        handleStringResponse(result != null ? result.toString() : "", resp);
     }
 }
 
