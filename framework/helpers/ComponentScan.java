@@ -2,7 +2,6 @@ package framework.helpers;
 
 import framework.annotation.Controller;
 import framework.annotation.Get;
-
 import framework.annotation.Post;
 import framework.annotation.RestController;
 
@@ -32,13 +31,11 @@ public class ComponentScan {
             String protocol = resource.getProtocol();
 
             if ("file".equals(protocol)) {
-                // Scanne les classes dans WEB-INF/classes
                 File directory = new File(resource.toURI());
                 if (directory.exists()) {
                     scanDirectory(directory, packageName, mappings, classLoader);
                 }
             } else if ("jar".equals(protocol)) {
-                // Scanne les classes du JAR, mais **ignore les controllers** du projet
                 if (!packageName.startsWith("framework.controller")) {
                     scanJar(resource, packageName, mappings, classLoader);
                 } else {
@@ -84,47 +81,53 @@ public class ComponentScan {
         }
     }
 
-private static void processClass(String className, Map<String, Mapping> mappings, ClassLoader cl) {
-    try {
-        Class<?> clazz = cl.loadClass(className);
+    private static void processClass(String className, Map<String, Mapping> mappings, ClassLoader cl) {
+        try {
+            Class<?> clazz = cl.loadClass(className);
 
-        if (clazz.isAnnotationPresent(Controller.class) || clazz.isAnnotationPresent(RestController.class)) {
-            System.out.println("Found controller class: " + className);
+            if (clazz.isAnnotationPresent(Controller.class) || clazz.isAnnotationPresent(RestController.class)) {
+                System.out.println("Found controller class: " + className);
 
-            String controllerPath = "";
-            if (clazz.isAnnotationPresent(Controller.class)) {
-                Controller controllerAnnotation = clazz.getAnnotation(Controller.class);
-                controllerPath = controllerAnnotation.value();
-            } 
-            // Pour RestController, on peut garder controllerPath = ""
-
-            for (Method method : clazz.getDeclaredMethods()) {
-                System.out.println("  Checking method: " + method.getName());
-                System.out.println("    Has @Get? " + method.isAnnotationPresent(Get.class));
-                System.out.println("    Has @Post? " + method.isAnnotationPresent(Post.class));
-
-                String fullPath = null;
-
-                if (method.isAnnotationPresent(Get.class)) {
-                    Get getAnnotation = method.getAnnotation(Get.class);
-                    fullPath = controllerPath + getAnnotation.value();
-                } else if (method.isAnnotationPresent(Post.class)) {
-                    Post postAnnotation = method.getAnnotation(Post.class);
-                    fullPath = controllerPath + postAnnotation.value();
+                String controllerPath = "";
+                if (clazz.isAnnotationPresent(Controller.class)) {
+                    Controller controllerAnnotation = clazz.getAnnotation(Controller.class);
+                    controllerPath = controllerAnnotation.value();
                 }
 
-                if (fullPath != null) {
-                    Mapping mapping = new Mapping(className, method.getName(), fullPath);
-                    mappings.put(fullPath, mapping);
-                    System.out.println("Mapped: " + fullPath + " -> " + className + "." + method.getName());
+                for (Method method : clazz.getDeclaredMethods()) {
+                    System.out.println("  Checking method: " + method.getName());
+                    System.out.println("    Has @Get? " + method.isAnnotationPresent(Get.class));
+                    System.out.println("    Has @Post? " + method.isAnnotationPresent(Post.class));
+
+                    String fullPath = null;
+                    String httpMethod = null;
+
+                    if (method.isAnnotationPresent(Get.class)) {
+                        Get getAnnotation = method.getAnnotation(Get.class);
+                        fullPath = controllerPath + getAnnotation.value();
+                        httpMethod = "GET";  // ✅ Stocker la méthode HTTP
+                    } else if (method.isAnnotationPresent(Post.class)) {
+                        Post postAnnotation = method.getAnnotation(Post.class);
+                        fullPath = controllerPath + postAnnotation.value();
+                        httpMethod = "POST";  // ✅ Stocker la méthode HTTP
+                    }
+
+                    if (fullPath != null) {
+                        Mapping mapping = new Mapping(className, method.getName(), fullPath);
+                        mapping.setHttpMethod(httpMethod);  // ✅ Définir la méthode HTTP
+                        
+                        // Utiliser une clé unique : méthode HTTP + URL
+                        String key = httpMethod + ":" + fullPath;
+                        mappings.put(key, mapping);
+                        
+                        System.out.println("Mapped: " + httpMethod + " " + fullPath + " -> " + className + "." + method.getName());
+                    }
                 }
             }
+        } catch (ClassNotFoundException e) {
+            System.err.println("Could not load class: " + className);
+        } catch (NoClassDefFoundError e) {
+            System.err.println("Cannot load class (dependency missing?): " + className);
         }
-    } catch (ClassNotFoundException e) {
-        System.err.println("Could not load class: " + className);
-    } catch (NoClassDefFoundError e) {
-        System.err.println("Cannot load class (dependency missing?): " + className);
     }
-}
-
 }

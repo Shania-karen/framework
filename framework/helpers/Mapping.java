@@ -1,42 +1,56 @@
 package framework.helpers;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 public class Mapping {
     private String className;
     private String methodName;
-    private List<String> pathParams; 
+    private String url;
+    private String httpMethod; 
 
-
-    public Mapping(String className, String methodName, String path) {
+    public Mapping(String className, String methodName, String url) {
         this.className = className;
         this.methodName = methodName;
-        this.pathParams = extractPathParams(path);
-    }
-
-
-    private static List<String> extractPathParams(String path) {
-        List<String> params = new ArrayList<>();
-        Pattern pattern = Pattern.compile("\\{([^}]+)\\}");
-        Matcher matcher = pattern.matcher(path);
-        while (matcher.find()) {
-            params.add(matcher.group(1));
-        }
-        return params;
+        this.url = url;
     }
 
     public String getClassName() {
         return className;
     }
 
+    public void setClassName(String className) {
+        this.className = className;
+    }
+
     public String getMethodName() {
         return methodName;
     }
-    public List<String> getPathParams() {
-        return pathParams;
+
+    public void setMethodName(String methodName) {
+        this.methodName = methodName;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public String getHttpMethod() {
+        return httpMethod;
+    }
+
+    public void setHttpMethod(String httpMethod) {
+        this.httpMethod = httpMethod;
+    }
+
+    @Override
+    public String toString() {
+        return "Mapping{" +
+                "httpMethod='" + httpMethod + '\'' +
+                ", url='" + url + '\'' +
+                ", className='" + className + '\'' +
+                ", methodName='" + methodName + '\'' +
+                '}';
     }
 }
-

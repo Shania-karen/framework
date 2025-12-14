@@ -7,12 +7,13 @@ public class Mapping {
     private Class<?> controllerClass;
     private Method method;
 
+
     public Mapping(String url, Class<?> controllerClass, Method method) {
         this.url = url;
         this.controllerClass = controllerClass;
         this.method = method;
     }
-
+ 
     public String getUrl() {
         return url;
     }
