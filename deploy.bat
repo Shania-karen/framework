@@ -19,6 +19,7 @@ echo Compilation du framework...
 javac -classpath "%SERVLET_JAR%";%FRAMEWORK_DIR%\gson-2.10.1.jar -d "%BUILD_DIR%\classes" ^
     %FRAMEWORK_DIR%\framework\annotation\*.java ^
     %FRAMEWORK_DIR%\framework\helpers\*.java ^
+     %FRAMEWORK_DIR%\framework\web\*.java ^
     %FRAMEWORK_DIR%\framework\servlet\*.java
 
 

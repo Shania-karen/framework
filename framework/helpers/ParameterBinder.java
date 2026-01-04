@@ -28,7 +28,6 @@ public class ParameterBinder {
             Object convertedValue = TypeConverter.convert(value, setter.getParameterTypes()[0]);
             setter.invoke(instance, convertedValue);
         } catch (Exception e) {
-            // Ignore si pas de setter
         }
     }
 

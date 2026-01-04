@@ -2,11 +2,13 @@ package framework.servlet;
 
 import framework.helpers.*;
 import jakarta.servlet.*;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.*;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+@MultipartConfig
 public class FrontServlet extends HttpServlet {
     private Map<String, Mapping> urlMappings;
     private RequestHandler requestHandler;
@@ -33,6 +35,10 @@ public class FrontServlet extends HttpServlet {
         } catch (Exception e) {
             throw new ServletException("Failed to initialize servlet", e);
         }
+    }
+    @Override
+    protected void doHead(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        doGet(req, resp);
     }
 
     @Override

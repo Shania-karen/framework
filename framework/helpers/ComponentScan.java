@@ -105,18 +105,17 @@ public class ComponentScan {
                     if (method.isAnnotationPresent(Get.class)) {
                         Get getAnnotation = method.getAnnotation(Get.class);
                         fullPath = controllerPath + getAnnotation.value();
-                        httpMethod = "GET";  // ✅ Stocker la méthode HTTP
+                        httpMethod = "GET"; 
                     } else if (method.isAnnotationPresent(Post.class)) {
                         Post postAnnotation = method.getAnnotation(Post.class);
                         fullPath = controllerPath + postAnnotation.value();
-                        httpMethod = "POST";  // ✅ Stocker la méthode HTTP
+                        httpMethod = "POST"; 
                     }
 
                     if (fullPath != null) {
                         Mapping mapping = new Mapping(className, method.getName(), fullPath);
-                        mapping.setHttpMethod(httpMethod);  // ✅ Définir la méthode HTTP
-                        
-                        // Utiliser une clé unique : méthode HTTP + URL
+                        mapping.setHttpMethod(httpMethod); 
+  
                         String key = httpMethod + ":" + fullPath;
                         mappings.put(key, mapping);
                         
